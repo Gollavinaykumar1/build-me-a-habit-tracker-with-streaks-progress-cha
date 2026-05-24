@@ -2,24 +2,22 @@
 
 === FILE: src/App.jsx ===
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, HashRouter } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import axios from 'axios';
 import { ToastContainer } from 'react-toastify';
-import { toast } from 'react-toastify';
-import { FiCheckCircle } from 'react-icons/fi';
-import { FiXCircle } from 'react-icons/fi';
-import { format, isToday, isYesterday } from 'date-fns';
-import { useForm } from 'react-hook-form';
+import { format } from 'date-fns';
+import { AiOutlineCheckCircle } from 'react-icons/ai';
 import { clsx } from 'clsx';
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function App() {
   const [habits, setHabits] = useState([]);
-  const [streaks, setStreaks] = useState({});
-  const [progress, setProgress] = useState({});
-  const [reminders, setReminders] = useState({});
-  const { register, handleSubmit } = useForm();
+  const [selectedHabit, setSelectedHabit] = useState(null);
+  const [date, setDate] = useState(new Date());
+  const [streak, setStreak] = useState(0);
+  const [progress, setProgress] = useState([]);
+  const [reminder, setReminder] = useState(false);
 
   useEffect(() => {
     axios.get(`${BASE_URL}/habits`)
@@ -27,83 +25,94 @@ function App() {
         setHabits(response.data);
       })
       .catch(error => {
-        toast.error('Error fetching habits');
+        console.error(error);
       });
   }, []);
 
-  const handleHabitCheck = (habitId, checked) => {
-    axios.patch(`${BASE_URL}/habits/${habitId}`, { checked: checked })
+  useEffect(() => {
+    if (selectedHabit) {
+      axios.get(`${BASE_URL}/habits/${selectedHabit.id}/streak`)
+        .then(response => {
+          setStreak(response.data);
+        })
+        .catch(error => {
+          console.error(error);
+        });
+    }
+  }, [selectedHabit]);
+
+  useEffect(() => {
+    if (selectedHabit) {
+      axios.get(`${BASE_URL}/habits/${selectedHabit.id}/progress`)
+        .then(response => {
+          setProgress(response.data);
+        })
+        .catch(error => {
+          console.error(error);
+        });
+    }
+  }, [selectedHabit]);
+
+  const handleCheck = (habit) => {
+    axios.post(`${BASE_URL}/habits/${habit.id}/check`)
       .then(response => {
-        const updatedHabits = habits.map(habit => habit.id === habitId ? { ...habit, checked: checked } : habit);
-        setHabits(updatedHabits);
-        calculateStreaks(updatedHabits);
-        calculateProgress(updatedHabits);
+        setHabits(habits.map(h => h.id === habit.id ? { ...h, checked: true } : h));
       })
       .catch(error => {
-        toast.error('Error updating habit');
+        console.error(error);
       });
   };
 
-  const calculateStreaks = (habits) => {
-    const streaks = {};
-    habits.forEach(habit => {
-      const today = new Date();
-      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-      const habitDate = new Date(habit.date);
-      if (isToday(habitDate)) {
-        streaks[habit.id] = (streaks[habit.id] || 0) + 1;
-      } else if (isYesterday(habitDate)) {
-        streaks[habit.id] = (streaks[habit.id] || 0) + 1;
-      } else {
-        streaks[habit.id] = 0;
-      }
-    });
-    setStreaks(streaks);
-  };
-
-  const calculateProgress = (habits) => {
-    const progress = {};
-    habits.forEach(habit => {
-      const today = new Date();
-      const habitDate = new Date(habit.date);
-      if (isToday(habitDate)) {
-        progress[habit.id] = (progress[habit.id] || 0) + 1;
-      } else {
-        progress[habit.id] = (progress[habit.id] || 0);
-      }
-    });
-    setProgress(progress);
-  };
-
-  const handleReminder = (habitId, reminder) => {
-    axios.patch(`${BASE_URL}/habits/${habitId}`, { reminder: reminder })
+  const handleUncheck = (habit) => {
+    axios.post(`${BASE_URL}/habits/${habit.id}/uncheck`)
       .then(response => {
-        const updatedHabits = habits.map(habit => habit.id === habitId ? { ...habit, reminder: reminder } : habit);
-        setHabits(updatedHabits);
-        setReminders({ ...reminders, [habitId]: reminder });
+        setHabits(habits.map(h => h.id === habit.id ? { ...h, checked: false } : h));
       })
       .catch(error => {
-        toast.error('Error updating reminder');
+        console.error(error);
       });
+  };
+
+  const handleSelectHabit = (habit) => {
+    setSelectedHabit(habit);
+  };
+
+  const handleReminder = () => {
+    setReminder(!reminder);
   };
 
   return (
     <HashRouter>
-      <div style={{ fontFamily: 'Arial, sans-serif', padding: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 'bold' }}>Habit Tracker</h1>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {habits.map(habit => (
-            <li key={habit.id} style={{ padding: 10, borderBottom: '1px solid #ccc' }}>
-              <input type="checkbox" checked={habit.checked} onChange={(e) => handleHabitCheck(habit.id, e.target.checked)} style={{ marginRight: 10 }} />
-              <span style={{ fontSize: 18, fontWeight: 'bold' }}>{habit.name}</span>
-              <span style={{ fontSize: 14, color: '#666' }}>{format(new Date(habit.date), 'MMM d, yyyy')}</span>
-              <span style={{ fontSize: 14, color: '#666', marginLeft: 10 }}>{streaks[habit.id] ? `Streak: ${streaks[habit.id]} days` : ''}</span>
-              <span style={{ fontSize: 14, color: '#666', marginLeft: 10 }}>{progress[habit.id] ? `Progress: ${progress[habit.id]}%` : ''}</span>
-              <input type="text" value={reminders[habit.id] || ''} onChange={(e) => handleReminder(habit.id, e.target.value)} style={{ padding: 5, border: '1px solid #ccc', borderRadius: 5, width: '100%', marginTop: 10 }} placeholder="Reminder" />
-            </li>
-          ))}
-        </ul>
-        <ToastContainer />
+      <div style={{ fontFamily: 'Arial, sans-serif', padding: 20, maxWidth: 800, margin: '0 auto' }}>
+        <h1 style={{ fontSize: 36, fontWeight: 'bold', marginBottom: 20 }}>Habit Tracker</h1>
+        <Routes>
+          <Route path="/" element={
+            <div>
+              <h2 style={{ fontSize: 24, marginBottom: 10 }}>Habits</h2>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {habits.map(habit => (
+                  <li key={habit.id} style={{ padding: 10, borderBottom: '1px solid #ccc' }}>
+                    <span style={{ fontSize: 18, marginRight: 10 }}>{habit.name}</span>
+                    <button style={{ backgroundColor: '#4CAF50', color: '#fff', border: 'none', padding: 10, borderRadius: 5 }} onClick={() => handleCheck(habit)}>Check</button>
+                    <button style={{ backgroundColor: '#f44336', color: '#fff', border: 'none', padding: 10, borderRadius: 5, marginLeft: 10 }} onClick={() => handleUncheck(habit)}>Uncheck</button>
+                    <button style={{ backgroundColor: '#03A9F4', color: '#fff', border: 'none', padding: 10, borderRadius: 5, marginLeft: 10 }} onClick={() => handleSelectHabit(habit)}>View</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          } />
+          <Route path="/habit/:id" element={
+            <div>
+              <h2 style={{ fontSize: 24, marginBottom: 10 }}>{selectedHabit && selectedHabit.name}</h2>
+              <p style={{ fontSize: 18, marginBottom: 20 }}>Streak: {streak} days</p>
+              <div style={{ width: '100%', height: 200, backgroundColor: '#f7f7f7', padding: 20, borderRadius: 10 }}>
+                <canvas style={{ width: '100%', height: '100%' }}></canvas>
+              </div>
+              <button style={{ backgroundColor: '#4CAF50', color: '#fff', border: 'none', padding: 10, borderRadius: 5 }} onClick={handleReminder}>Set Reminder</button>
+            </div>
+          } />
+        </Routes>
+        <ToastContainer style={{ fontSize: 18, fontWeight: 'bold' }} />
       </div>
     </HashRouter>
   );
@@ -126,9 +135,9 @@ ReactDOM.render(
 === END ===
 
 === FILE: src/index.css ===
-/* No styles needed for this example */
+/* No styles defined */
 === END ===
 
 === FILE: src/api.js ===
-// No separate API file needed, API calls are made directly in the App component
+// No API functions defined, using axios directly in App component
 === END ===
